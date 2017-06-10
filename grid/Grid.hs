@@ -11,6 +11,7 @@ import Data.Vector.Unboxed ((!))
 -- import qualified Data.PQueue.Min as PQ
 import qualified Data.IntPSQ as PSQ
 
+
 {-
 Damn! Any way to use these with Unboxed vectors?
 
@@ -61,10 +62,11 @@ data Coord = Coord
 -- Calculates the infinity norm between two Coords
 linf :: Coord -> Coord -> Int
 linf (Coord x1 y1) (Coord x2 y2) = let
-  xdif = abs x1-x2
-  ydif = abs y1-y2
+  xdif = abs (x1-x2)
+  ydif = abs (y1-y2)
   in
     if xdif >= ydif then xdif else ydif
+{-# INLINE linf #-}
 
 isInBounds :: GridDims -> Int -> Bool
 isInBounds (GridDims xdim ydim) i = i > 0 && i < (xdim * ydim)
@@ -165,3 +167,26 @@ makePath visited current start =
         Just p  -> current : (makePath visited p start)
         Nothing -> error "Error -- node wasn't in the visited map when backtracing path"
       
+-- Mark all Visited and onPath nodes in a grid based on search result
+markGrid :: Pathfinding -> [Int] -> Grid
+markGrid pf path =
+  let
+    ds  = dims $ grid pf
+    sqs = squares $ grid pf
+    v   = visited pf
+    pathmap = Map.fromList (map (\ x -> (x, 1)) path)
+    visitedMarked = U.imap (markSquare v 4) sqs
+    pathMarked = U.imap (markSquare pathmap 5) visitedMarked
+  in
+    (Grid ds pathMarked)
+                                
+-- Marks squares with the marker value. If any of the squares are Blocked, will throw
+-- and error as a sanity check
+markSquares :: Map.Map Int Int -> U.Vector Square -> Square -> U.Vector Square
+markSquares colormap sqs color = U.imap (markSquare colormap color) sqs
+
+markSquare :: Map.Map Int Int -> Square -> Int -> Square -> Square
+markSquare colormap color i sq = case sq of
+  --0 -> error "Error -- tried to mark a blocked square as visited or on path!"
+  _ -> if Map.member i colormap then color else sq
+                                    

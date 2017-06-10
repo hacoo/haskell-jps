@@ -1,4 +1,4 @@
--- Implements boring, bone-stock a-star search
+-- Implements A-star search framework and basic heuristic
 
 module Astar where
 
@@ -7,54 +7,80 @@ import Data.Word
 import qualified Data.Vector.Unboxed as U
 import Data.Vector.Unboxed ((!))
 import qualified Data.Set as Set
--- import qualified Data.PQueue.Min as PQ
-import qualified Data.IntPSQ as PSQ
 import qualified Data.List as L
+import qualified Data.IntPSQ as PSQ
 
 import Grid
 
 import Debug.Trace
 
--- pathfind from Start to Finish. Return a Grid with the path and visited nodes drawn on.
-findPath :: Grid -> Int -> Int -> Maybe [Int]
-findPath grid start finish =
+
+-- an a-star expansion method. Examines the current pathfinding state and finds new nodes; returns
+-- a list of the new searchnodes
+--type ExpandFn = Pathfinding -> Int -> Int -> PSQ.IntPSQ Int SearchNode
+type ExpandFn = Pathfinding -> Int -> Int -> [SearchNode]
+type HeuristicFn = SearchNode -> Pathfinding -> Int
+
+-- An a-star heuristic. Examines the current pathfinding state and a square index, and returns a value.
+-- Lower is better.
+
+-- pathfind from Start to Finish. Return the path and a grid, with each node marked according to whether it was
+-- visited or on-path. Uses normal a-star heuristic.
+findPathNormal :: Grid -> Int -> Int -> (Maybe [Int], Grid)
+findPathNormal g start finish =
   let
-    pf        = newPathfinding grid start finish
-    startnode = (SearchNode start start 0)
-    path      = astar pf startnode
+    pf          = newPathfinding g start finish
+    startnode   = (SearchNode start start 0)
   in
-    path
+    astar normalExpand normalHeuristic pf startnode
+
     
 -- The normal A* heuristic. Uses infinity norm, since we can move in all 8 directions on our grid
-heuristic :: Int ->  Pathfinding -> Int
-heuristic p (Pathfinding grid visited open start finish) =
+normalHeuristic :: HeuristicFn
+normalHeuristic node (Pathfinding grid visited open start finish) =
   let
     dim   = dims grid
+    p     = current node
+    infinitynorm = linf (i2c dim p) (i2c dim finish)
   in
-    linf (i2c dim p) (i2c dim finish)
-     
-expand :: Pathfinding -> Int -> Int -> PSQ.IntPSQ Int SearchNode
-expand pf curr depth =
+    infinitynorm + (depth node)
+
+-- Normal expansion method, just expands to all adjacent nodes
+normalExpand :: ExpandFn
+normalExpand pf curr depth =
   let
     squaresToAdd = getOpenAround pf curr
     depth'       = depth+1
-    searchnodes  = [((heuristic i pf) + depth', (SearchNode  curr i depth')) | i <- squaresToAdd]
   in
-    -- An example of trace!!!
-    --trace (show ((squares (grid pf)) ! curr)) $ L.foldl' (\ pq node -> PQ.insert node pq) (open pf) searchnodes
-    L.foldl' (\ pq (priority, node) -> PSQ.insert (current node) priority node pq) (open pf) searchnodes
+     [(SearchNode  curr i depth') | i <- squaresToAdd]
 
-astar :: Pathfinding -> SearchNode -> Maybe [Int]
-astar pf (SearchNode prev curr depth) =
+-- Utility functions, dumps a list of SearchNodes to a PQ
+addToPQ :: PSQ.IntPSQ Int SearchNode -> [(Int, SearchNode)] -> PSQ.IntPSQ Int SearchNode
+addToPQ open nodes = L.foldl' (\ pq (priority, node) -> PSQ.insert (current node) priority node pq) open nodes
+
+-- Runs a-star search with the specific expansion function and heuristic function.
+-- Returns the optimal path as a list of integers, and a Grid, updated to show the path
+-- and visited nodes.
+astar :: ExpandFn    ->
+         HeuristicFn ->
+         Pathfinding ->
+         SearchNode  ->
+         (Maybe [Int], Grid)
+astar expand heuristic pf (SearchNode prev curr depth) =
   let
     (Pathfinding grid visited open start finish) = pf
     visited' = Map.insert curr prev visited
-    open'    = expand pf curr depth
+    newnodes = expand pf curr depth
+    nodeswithcosts = [(heuristic n pf, n) | n <- newnodes]
+    open'    = addToPQ open nodeswithcosts
   in
     if curr == finish then
-      trace "Done" $ Just (makePath visited' curr start)
+      let path = makePath visited' curr start in
+        (Just path, markGrid pf path)
     else
       case PSQ.findMin open' of
-        Just (k, p, searchnode) -> astar (Pathfinding grid visited' (PSQ.deleteMin open') start finish) searchnode
-        Nothing         -> Nothing
-              
+        Just (k, p, searchnode) -> let pf' = (Pathfinding grid visited' (PSQ.deleteMin open') start finish) in
+                                         astar  expand heuristic pf' searchnode
+        Nothing                 -> (Nothing, markGrid (Pathfinding grid visited' open' start finish) [])
+
+  
