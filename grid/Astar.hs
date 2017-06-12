@@ -57,15 +57,40 @@ normalHeuristic node (Pathfinding grid visited open start finish) = let
 normalExpand :: ExpandFn
 normalExpand pf sn =
   let
-    (SearchNode prev curr d depth) = sn
-    squaresToAdd = getOpenAround pf curr
+    (SearchNode prev c d depth) = sn
+    g = grid pf
+    v = visited pf
+    o = open pf
+    squaresToAdd = getOpenAround g c
     depth'       = depth+1
+    sns = [(SearchNode (Just sn) i dir depth') | (dir, i) <- squaresToAdd]
   in
-     [(SearchNode (Just sn) i dir depth') | (dir, i) <- squaresToAdd]
+    [
+      s | s <- sns,
+      let
+        a   = index s
+        val = normalHeuristic s pf 
+      in
+        betterThanOpen o val a && betterThanVisited v val a
+        ]
+
+betterThanOpen :: PSQ.IntPSQ Int SearchNode -> Int -> Int -> Bool
+betterThanOpen open val i = case result of
+                              Nothing -> True
+                              Just (priority, _) -> val < priority
+                            where result = PSQ.lookup i open
+
+betterThanVisited :: Map.Map Int Int -> Int -> Int -> Bool
+betterThanVisited visited val i = case result of
+                                    Nothing -> True
+                                    Just v  -> val < v
+                                  where result = Map.lookup i visited
 
 -- Utility functions, dumps a list of SearchNodes to a PQ
 addToPQ :: PSQ.IntPSQ Int SearchNode -> [(Int, SearchNode)] -> PSQ.IntPSQ Int SearchNode
-addToPQ open nodes = L.foldl' (\ pq (priority, node) -> PSQ.insert (index node) priority node pq) open nodes
+addToPQ open nodes = foldl (\ pq (priority, node) -> PSQ.insert (index node) priority node pq) open nodes
+
+
 
 -- Runs a-star search with the specific expansion function and heuristic function.
 -- Returns the optimal path as a list of integers, and a Grid, updated to show the path
@@ -78,19 +103,21 @@ astar :: ExpandFn    ->
 astar expand heuristic pf sn =
   let
     (Pathfinding grid visited open start finish) = pf
-    (SearchNode prev curr dir depth) = sn
-    visited' = Map.insert curr 1 visited
-    pf' = (Pathfinding grid visited' open start finish)
-    newnodes = expand pf' sn
-    nodeswithcosts = [(heuristic n pf, n) | n <- newnodes]
-    open'    = addToPQ open nodeswithcosts
+    (SearchNode prev curr dir depth)             = sn
+    value                                        = heuristic sn pf
+    visited'                                     = Map.insert curr value visited
+    pf'                                          = (Pathfinding grid visited' open start finish)
+    newnodes                                     = expand pf' sn
+    nodeswithcosts                               = [(heuristic n pf', n) | n <- newnodes]
+    open'                                        = addToPQ open nodeswithcosts
   in
     if curr == finish then
       (Just sn, pf')
     else
       case PSQ.findMin open' of
         Just (k, p, searchnode) -> let
-          pf'' = (Pathfinding grid visited' (PSQ.deleteMin open') start finish)
+          open''  = PSQ.deleteMin open'
+          pf''    = (Pathfinding grid visited' open'' start finish)
           in
             astar expand heuristic pf'' searchnode
         Nothing                 -> (Nothing, pf')

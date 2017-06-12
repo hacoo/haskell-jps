@@ -6,7 +6,6 @@ friday-devil package.
 {-# LANGUAGE ScopedTypeVariables #-}
 
 import System.Environment (getArgs)
-import System.TimeIt
 import Criterion.Main
 import System.Directory (doesFileExist, removeFile)
 import Control.Monad (when)
@@ -16,9 +15,7 @@ import qualified Data.Vector.Unboxed as Unboxed
 import qualified Data.Map as Map
 import Data.List
 import Debug.Trace
-
-import Control.DeepSeq(force)
-import Control.Exception(evaluate)
+import System.Console.GetOpt
 
 import qualified Vision.Image as Image
 import Vision.Image.Storage.DevIL (Autodetect (..), PNG (..), load, save)
@@ -45,9 +42,6 @@ main =
   finish <- return (Coord 386 159)
   
   --finish <- return (Coord 420 393)
-  putStrLn ("Loading: " ++ input)
-  putStrLn ("Start: " ++ (show start))
-  putStrLn ("finish: " ++ (show finish))
   pathfindImage input output start finish
   
 -- Do a pathfinding operation on the image at pathIn; save the
@@ -64,30 +58,25 @@ pathfindImage pathIn pathOut startc finishc = do
 
     Right (rgb :: Image.RGB) -> do
       
-      putStrLn ("Loaded: " ++ pathIn)
-      
-      grid          <- return (imageToGrid rgb)
-      dim           <- return (dims grid)
-      start         <- return (c2i dim startc)
-      finish        <- return (c2i dim finishc)
-      putStrLn("starting...")
-
+      let
+        grid   = imageToGrid rgb
+        dim    = dims grid
+        start  = c2i dim startc
+        finish = c2i dim finishc
+        
       {-
       defaultMain [
         bench "searchAstar" $ whnf (\x -> Astar.findPathNormal x start finish) grid
         ]
-      -}
       (path, visited) <- return (Astar.findPathNormal grid start finish)
+      -}
 
 {-
       defaultMain [
         bench "searchJPS" $ whnf (\x -> JPS.findPathJPS x start finish) grid
         ]
-      (path, visited) <- return (JPS.findPathJPS grid start finish)
 -}
-      --putStrLn $ show (map (\x -> (i2c dim x)) path)
-      -- putStrLn $ show path
-      
+      (path, visited) <- return (JPS.findPathJPS grid start finish)
       grid' <- return $ (markStartFinish start finish) $ (markPath path) $ (markVisited visited grid)
       
       case path of
@@ -98,16 +87,14 @@ pathfindImage pathIn pathOut startc finishc = do
           
       image <- return (gridToImage grid')
     
-      putStrLn ("Attempting to save to: " ++ pathOut)
       outExists <- doesFileExist pathOut
       when outExists (removeFile pathOut)
       
       mErr <- save Autodetect pathOut image
       case mErr of
-        Nothing ->
-          putStrLn "Success!"
+        Nothing -> return ()
         Just err -> do
-          putStrLn "ERROR - could not save image"
+          putStrLn $ "ERROR - could not save image to path: " ++ pathOut
           print err
   
 -- Convert coordinates to / from the Shape format used by Vision (we only need 2d coordinates :) )

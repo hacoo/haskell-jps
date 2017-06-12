@@ -265,12 +265,11 @@ emptyGrid :: GridDims -> Grid
 emptyGrid dims = (Grid dims (U.fromList []))
 
 -- Finds all valid open square indices around an index
-getOpenAround :: Pathfinding -> Int -> [(Direction, Int)]
-getOpenAround pf i = let
-  g = grid pf
+getOpenAround :: Grid -> Int -> [(Direction, Int)]
+getOpenAround g i = let
   d = dims g
   in 
-    filter (\(dir, i) -> (isOpen pf i))
+    filter (\(dir, i) -> (not $ isBlocked g i))
     [(NW, nw d i), (N, n d i), (NE, ne d i),
      (W,  w  d i),             (E,  e  d i),
      (SW, sw d i), (S, s d i), (SE, se d i)]
