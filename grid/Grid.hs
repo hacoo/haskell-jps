@@ -53,13 +53,108 @@ type Square = Word8
 
 -- Could refactor Int / Coordinate indices into a typeclass later if desired
 -- a grid coordinate as a 2d (x,y) pair
-data Coord = Coord
+data Coord = Coord 
   {
     x :: Int,
     y :: Int
   }
 
+data Direction = N | NE | E | SE | S | SW | W | NW | C deriving (Eq, Show)
+{-
+instance Show Direction where
+  show N  = "N"
+  show NE = "NE"
+  show E  = "E"
+  show SE = "SE"
+  show S  = "S"
+  show SW = "SW"
+  show W  = "W"
+  show NW = "NW"
+-}
+-- Functions for moving in each direction
+n :: GridDims -> Int -> Int
+n d i = i - (xmax d)
+
+s :: GridDims -> Int -> Int
+s d i = i + (xmax d)
+
+e :: GridDims -> Int -> Int
+e d i = i + 1
+
+w :: GridDims -> Int -> Int
+w d i = i - 1
+
+ne :: GridDims -> Int -> Int
+ne d i = e d $ n d i
+
+nw :: GridDims -> Int -> Int
+nw d i = w d $ n d i
+
+se :: GridDims -> Int -> Int
+se d i = e d $ s d i 
+
+sw :: GridDims -> Int -> Int
+sw d i = w d $ s d i
+
+moveInDirection :: GridDims -> Direction -> Int -> Int
+moveInDirection d dir i = case dir of
+                            N  -> (n d i)
+                            NE -> (ne d i)
+                            E  -> (e d i)
+                            SE -> (se d i)
+                            S  -> (s d i)
+                            SW -> (sw d i)
+                            W  -> (w d i)
+                            NW -> (nw d i)
+
+between :: Direction -> Direction -> Direction
+between d1 d2 = case (d1, d2) of
+                  (N, E) -> NE
+                  (E, N) -> NE
+                  (E, S) -> SE
+                  (S, E) -> SE
+                  (S, W) -> SW
+                  (W, S) -> SW
+                  (W, N) -> NW
+                  (N, W) -> NW
+                  _      -> error $ ("Tried to find direction between non-orthogonal directions: "
+                                      ++ show d1 ++ " and " ++ show d2)
+nineties :: Direction -> (Direction, Direction)
+nineties d = case d of
+               N  -> (W, E)
+               NE -> (NW, SE)
+               E  -> (N, S)
+               SE -> (NE, SW)
+               S  -> (E, W)
+               SW -> (SE, NW)
+               W  -> (S, N)
+               NW -> (SW, NE)
+
+fortyfives :: Direction -> (Direction, Direction)
+fortyfives d = case d of
+                 N  -> (NE, NW)
+                 NE -> (N, E)
+                 E  -> (NE, SE)
+                 SE -> (E, S)
+                 S  -> (SE, SW)
+                 SW -> (S, W)
+                 W  -> (SW, NW)
+                 NW -> (W, N)
+
+opposite :: Direction -> Direction
+opposite d = case d of
+               N  -> S
+               NE -> SW
+               E  -> W
+               SE -> NW
+               S  -> N
+               SW -> NE
+               W  -> E
+               NW -> SE
+  
+
 -- Calculates the infinity norm between two Coords
+{-
 linf :: Coord -> Coord -> Int
 linf (Coord x1 y1) (Coord x2 y2) = let
   xdif = abs (x1-x2)
@@ -67,6 +162,15 @@ linf (Coord x1 y1) (Coord x2 y2) = let
   in
     if xdif >= ydif then xdif else ydif
 {-# INLINE linf #-}
+-}
+
+chebyshev :: Coord -> Coord -> Int
+chebyshev (Coord x1 y1) (Coord x2 y2) = let
+  xdif = abs (x2-x1)
+  ydif = abs (y2-y1)
+  in
+    max xdif ydif
+    
 
 isInBounds :: GridDims -> Int -> Bool
 isInBounds (GridDims xdim ydim) i = i > 0 && i < (xdim * ydim)
@@ -83,6 +187,13 @@ isOpen pf i =
     not (Map.member i v)
 {-# INLINE isOpen #-}
                    
+isBlocked :: Grid -> Int -> Bool
+isBlocked (Grid dims squares) i = (not (isInBounds dims i)) || ((squares ! i) == 0)
+{-# INLINE isBlocked #-}
+
+isFinish :: Pathfinding -> Int -> Bool
+isFinish (Pathfinding g v o s f) i = i == f
+{-# INLINE isFinish #-}
 
 -- Convert a 2-d coordinate to a flattened index
 c2i :: GridDims -> Coord -> Int
@@ -123,11 +234,12 @@ data SearchNode = SearchNode
   {
     prev     :: Int,
     current  :: Int,
+    dir      :: Direction,
     depth    :: Int
   }
 
 instance Show SearchNode where
-  show (SearchNode pr c d) = "(SearchNode: { " ++ (show pr) ++ "," ++ (show c) ++ "," ++ (show d) ++ " })"
+  show (SearchNode pr c d dep) = "(SearchNode: { " ++ (show pr) ++ "," ++ (show c) ++ "," ++ (show dep) ++ " })"
 
   
 -- Represents pathfinding in progress
@@ -147,14 +259,15 @@ emptyGrid :: GridDims -> Grid
 emptyGrid dims = (Grid dims (U.fromList []))
 
 -- Finds all valid open square indices around an index
-getOpenAround :: Pathfinding -> Int -> [Int]
+getOpenAround :: Pathfinding -> Int -> [(Direction, Int)]
 getOpenAround pf i = let
-  (Grid (GridDims xdim ydim) _) = grid pf
+  g = grid pf
+  d = dims g
   in 
-    filter (isOpen pf)
-    [i - xdim - 1, i - xdim, i - xdim + 1,
-     i - 1                 , i + 1       ,
-     i + xdim - 1, i + xdim, i + xdim + 1]
+    filter (\(dir, i) -> (isOpen pf i))
+    [(NW, nw d i), (N, n d i), (NE, ne d i),
+     (W,  w  d i),             (E,  e  d i),
+     (SW, sw d i), (S, s d i), (SE, se d i)]
 
 -- Turns a path beginning at finish into a list of visited nodes
 makePath :: Map.Map Int Int -> Int -> Int -> [Int]
@@ -186,7 +299,5 @@ markSquares :: Map.Map Int Int -> U.Vector Square -> Square -> U.Vector Square
 markSquares colormap sqs color = U.imap (markSquare colormap color) sqs
 
 markSquare :: Map.Map Int Int -> Square -> Int -> Square -> Square
-markSquare colormap color i sq = case sq of
-  --0 -> error "Error -- tried to mark a blocked square as visited or on path!"
-  _ -> if Map.member i colormap then color else sq
+markSquare colormap color i sq = if Map.member i colormap then color else sq
                                     

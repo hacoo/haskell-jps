@@ -15,27 +15,33 @@ import qualified Data.Vector.Storable as Storable
 import qualified Data.Vector.Unboxed as Unboxed
 import qualified Data.HashMap.Strict as HashMap
 import Data.List
+import Debug.Trace
 
 import Control.DeepSeq(force)
 import Control.Exception(evaluate)
 
 import qualified Vision.Image as Image
-import Vision.Image.Storage.DevIL (Autodetect (..), load, save)
+import Vision.Image.Storage.DevIL (Autodetect (..), PNG (..), load, save)
 import Vision.Primitive (ix2)
 import Vision.Primitive.Shape
 
 import Grid
+import qualified JPS as JPS
 import qualified Astar as Astar
+
 
 main::IO ()
 main = 
   do
   -- [input, output] <- getArgs
 
-  input  <- return "../maps/AR0017SRBWhighres.jpg"
-  output <- return "./testout.jpg"
-  start  <- return (Coord 584 438)
-  finish <- return (Coord 309 175)
+  input  <- return "../maps/AR0011SRBW.jpg"
+  output <- return "./testout.png"
+  --start  <- return (Coord 60 53)
+  --finish <- return (Coord 47 33)
+  start  <- return (Coord 404 414)
+  finish <- return (Coord 584 298)
+  
   --finish <- return (Coord 420 393)
   putStrLn ("Loading: " ++ input)
   putStrLn ("Start: " ++ (show start))
@@ -65,9 +71,18 @@ pathfindImage pathIn pathOut startc finishc = do
       putStrLn("starting...")
 
       defaultMain [
-        bench "search" $ whnf (\x -> Astar.findPathNormal x start finish) grid
+        bench "searchAstar" $ whnf (\x -> Astar.findPathNormal x start finish) grid
         ]
+      {-
       (path, grid') <- return (Astar.findPathNormal grid start finish)
+       -}
+
+{-
+-}
+      defaultMain [
+        bench "searchJPS" $ whnf (\x -> JPS.findPathJPS x start finish) grid
+        ]
+      (path, grid') <- return (JPS.findPathJPS grid start finish)
       
       case path of
         Just ps -> do
@@ -76,12 +91,13 @@ pathfindImage pathIn pathOut startc finishc = do
           putStrLn("No path found!")
           
       image <- return (gridToImage grid')
+      imageMarked <- return (markStartFinish image start finish)
     
-      putStrLn ("Attempting to save to: " ++ pathIn)
+      putStrLn ("Attempting to save to: " ++ pathOut)
       outExists <- doesFileExist pathOut
       when outExists (removeFile pathOut)
       
-      mErr <- save Autodetect pathOut image
+      mErr <- save Autodetect pathOut imageMarked
       case mErr of
         Nothing ->
           putStrLn "Success!"
@@ -132,3 +148,14 @@ gridToImage (Grid (GridDims dimx dimy) grid) =
     pixels     = map squareToColor (Unboxed.toList grid)
   in Image.Manifest gridshape (Storable.fromList pixels)
     
+markStartFinish :: Image.RGB -> Int -> Int -> Image.RGB
+markStartFinish (Image.Manifest msize mvec) start finish =
+  let
+      updated = Storable.imap (mark start finish) mvec
+  in (Image.Manifest msize updated)
+    
+mark :: Int -> Int -> Int -> Image.RGBPixel -> Image.RGBPixel
+mark start finish i p | i == start  = (Image.RGBPixel 0  255 0)
+                      | i == finish = (Image.RGBPixel 0  0   255)
+                      | otherwise   = p
+             

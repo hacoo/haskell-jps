@@ -18,7 +18,7 @@ import Debug.Trace
 -- an a-star expansion method. Examines the current pathfinding state and finds new nodes; returns
 -- a list of the new searchnodes
 --type ExpandFn = Pathfinding -> Int -> Int -> PSQ.IntPSQ Int SearchNode
-type ExpandFn = Pathfinding -> Int -> Int -> [SearchNode]
+type ExpandFn = Pathfinding -> SearchNode -> [SearchNode]
 type HeuristicFn = SearchNode -> Pathfinding -> Int
 
 -- An a-star heuristic. Examines the current pathfinding state and a square index, and returns a value.
@@ -30,29 +30,28 @@ findPathNormal :: Grid -> Int -> Int -> (Maybe [Int], Grid)
 findPathNormal g start finish =
   let
     pf          = newPathfinding g start finish
-    startnode   = (SearchNode start start 0)
+    startnode   = (SearchNode start start C 0)
   in
     astar normalExpand normalHeuristic pf startnode
 
     
 -- The normal A* heuristic. Uses infinity norm, since we can move in all 8 directions on our grid
 normalHeuristic :: HeuristicFn
-normalHeuristic node (Pathfinding grid visited open start finish) =
-  let
-    dim   = dims grid
-    p     = current node
-    infinitynorm = linf (i2c dim p) (i2c dim finish)
+normalHeuristic node (Pathfinding grid visited open start finish) = let
+  dim   = dims grid
+  p     = current node
+  dist  = chebyshev (i2c dim p) (i2c dim finish)
   in
-    infinitynorm + (depth node)
+    dist + (depth node)
 
 -- Normal expansion method, just expands to all adjacent nodes
 normalExpand :: ExpandFn
-normalExpand pf curr depth =
+normalExpand pf (SearchNode prev curr d depth) =
   let
     squaresToAdd = getOpenAround pf curr
     depth'       = depth+1
   in
-     [(SearchNode  curr i depth') | i <- squaresToAdd]
+     [(SearchNode  curr i dir depth') | (dir, i) <- squaresToAdd]
 
 -- Utility functions, dumps a list of SearchNodes to a PQ
 addToPQ :: PSQ.IntPSQ Int SearchNode -> [(Int, SearchNode)] -> PSQ.IntPSQ Int SearchNode
@@ -66,11 +65,13 @@ astar :: ExpandFn    ->
          Pathfinding ->
          SearchNode  ->
          (Maybe [Int], Grid)
-astar expand heuristic pf (SearchNode prev curr depth) =
+astar expand heuristic pf sn =
   let
     (Pathfinding grid visited open start finish) = pf
+    (SearchNode prev curr dir depth) = sn
     visited' = Map.insert curr prev visited
-    newnodes = expand pf curr depth
+    pf' = (Pathfinding grid visited' open start finish)
+    newnodes = expand pf' sn
     nodeswithcosts = [(heuristic n pf, n) | n <- newnodes]
     open'    = addToPQ open nodeswithcosts
   in
@@ -80,7 +81,7 @@ astar expand heuristic pf (SearchNode prev curr depth) =
     else
       case PSQ.findMin open' of
         Just (k, p, searchnode) -> let pf' = (Pathfinding grid visited' (PSQ.deleteMin open') start finish) in
-                                         astar  expand heuristic pf' searchnode
+                                         astar expand heuristic pf' searchnode
         Nothing                 -> (Nothing, markGrid (Pathfinding grid visited' open' start finish) [])
 
   
