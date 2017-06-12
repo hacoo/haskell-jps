@@ -15,26 +15,32 @@ import Astar
 
 import Debug.Trace
 
-data JumpPoint = JumpPoint
-  {
-    d     :: Direction,
-    i     :: Int
-  }
-
-data Jump = Jump
-  {
-    dir   :: Direction,
-    start :: Int,
-    end   :: Int
-  }
-
-findPathJPS :: Grid -> Int -> Int -> (Maybe [Int], Grid)
+findPathJPS :: Grid -> Int -> Int -> ([Int], Map.Map Int Int)
 findPathJPS g start finish =
   let
-    pf          = newPathfinding g start finish
-    startnode   = (SearchNode start start C 0)
+    pf            = newPathfinding g start finish
+    startnode     = (SearchNode Nothing start C 0)
+    (result, pf') = astar expandJPS heuristicJPS pf startnode
+    v             = visited pf'
   in
-    astar expandJPS heuristicJPS pf startnode
+    case result of
+      Nothing -> ([ ], v)
+      Just sn -> (unwindJPS pf' sn, v)
+      --Just sn -> ([], v)
+
+unwindJPS :: Pathfinding -> SearchNode -> [Int]
+unwindJPS pf (SearchNode prev i dir depth) = 
+  case prev of
+    Nothing                         -> [i]
+    Just sn -> let (SearchNode _ p backdir _) = sn in
+      (unwindBetween (dims $ grid pf) (opposite backdir) i p) ++ unwindJPS pf sn
+      
+unwindBetween :: GridDims -> Direction -> Int -> Int -> [Int]
+unwindBetween d dir s f
+  | s == f               = [ ]
+  | dir == C             = [s]
+  | not (isInBounds d s) = error $ "JPS path unwinding went out of bounds!"
+  | otherwise            = s : unwindBetween d dir (moveInDirection d dir s) f
 
 -- Gets direction of dest relative to src
 pairToDirection :: GridDims -> Int -> Int -> Direction 
@@ -60,33 +66,6 @@ expandJPS pf sn = let (SearchNode prev curr dir depth) = sn in
 heuristicJPS :: HeuristicFn
 heuristicJPS = normalHeuristic
     
--- Rules for scanning in each direction are below. Scans will continue in the specified direction
--- until they are blocked, hit the finish, or encounder a forced neighbor point. When forced neighbors
--- are encountered, scanning will stop, and the new jump points are returned. 
-
--- I wonder if there's a better way to do this? I wasn't able to think of a reasonably concise way to express
--- the JPS rules, other than just enumerating them.
-
--- infinity norm between two search nodes
---slinf :: GridDims -> SearchNode -> SeachNode -> Int
---snlinf g (SearchNode _ c1 _ _) (SearchNode _ c2 _ _)
-
--- Creates a searchnode relative to i if the target square is not blocked; otherwise returns empty list
-createSN :: Grid -> Int -> Int -> Direction -> Int -> [SearchNode]
-createSN g st i dir depth =
-  let d = dims g
-      t = moveInDirection d dir i
-  in
-    if isBlocked g t then [ ] else [(SearchNode st t dir depth)]
-
--- Creates a searchnode at dir2 if dir1 is blocked, and dir2 is not
-createSNIfBlocked :: Grid -> Int -> Int -> Direction -> Direction -> Int -> [SearchNode]
-createSNIfBlocked g st i dir1 dir2 depth =
-  let d  = dims g
-      s1 = moveInDirection d dir1 i
-      s2 = moveInDirection d dir2 i
-  in
-    if isBlocked g s1 && not (isBlocked g s2) then [(SearchNode st s2 dir2 depth)] else [ ]
 
 scan :: Pathfinding -> SearchNode -> [SearchNode]
 scan pf sn 
@@ -99,96 +78,64 @@ scan pf sn
 scanDiag :: Pathfinding -> SearchNode -> Int -> Int -> [SearchNode]
 scanDiag pf sn i dep
   | (isBlocked g i)                   =  [ ]
-  | (isFinish  pf i)                  =  [(SearchNode st i C 0)]
-  | otherwise                         =  stScans ++ (scanDiag  pf sn (moveInDirection d dir i) (dep + 1))
+  | (isFinish  pf i)                  =  [(SearchNode (Just sn) i C 0)]
+  | otherwise                         =  if null stScans
+                                         then (scanDiag pf sn (moveInDirection d diag i) (dep + 1))
+                                         else stScans ++
+                                              [(SearchNode (Just sn) (moveInDirection d diag i) diag (dep + 1))]
   where
-    g                          = grid pf
-    d                          = dims g
-    (SearchNode prev st dir _) = sn
-    (f1, f2)                   = fortyfives dir
-    stScans                    = (scanStraight pf (SearchNode prev st f1 dep) i dep) ++
-                                 (scanStraight pf (SearchNode prev st f2 dep) i dep)
+    g         = grid pf
+    d         = dims g
+    diag      = dir sn
+    (f1, f2)  = fortyfives diag
+    stScans   = (scanStraight pf (SearchNode (Just sn) i f1 dep) i dep) ++
+                (scanStraight pf (SearchNode (Just sn) i f2 dep) i dep)
+    --stScans   = [(SearchNode (Just sn) i f1 dep), (SearchNode (Just sn) i f2 dep)]
+    
 
 scanStraight :: Pathfinding -> SearchNode -> Int -> Int -> [SearchNode]
 scanStraight pf sn i dep
-  | (isBlocked g i)                   =  [ ]
-  | (isFinish  pf i)                  =  [(SearchNode st i C 0)]
-  | hasForcedNeighborsStraight g sn i = forcedNeighborsStraight g sn i dep
-  | otherwise                         = scanStraight pf sn (moveInDirection d dir i) (dep + 1)
+  | (isBlocked g i)                   = [ ]
+  | (isFinish  pf i)                  = [(SearchNode (Just sn) i C 0)]
+  | hasForcedNeighborsStraight g forward i = forcedNeighborsStraight g sn i forward dep
+  | otherwise                         = scanStraight pf sn (moveInDirection d forward i) (dep + 1)
   where
-    g = grid pf
-    d = dims g
-    (SearchNode prev st dir _) = sn
+    g                              = grid pf
+    d                              = dims g
+    (SearchNode prev st forward _) = sn
 
-hasForcedNeighborsStraight :: Grid -> SearchNode -> Int -> Bool
-hasForcedNeighborsStraight g (SearchNode p c dir dep) i = let
-  (d1, d2) = nineties dir
+hasForcedNeighborsStraight :: Grid -> Direction -> Int -> Bool
+hasForcedNeighborsStraight g forward i = let
+  (d1, d2) = nineties forward
   d        = dims g
   in
     isBlocked g (moveInDirection d d1 i) || isBlocked g (moveInDirection d d2 i)
   
-forcedNeighborsStraight :: Grid -> SearchNode -> Int -> Int -> [SearchNode]
-forcedNeighborsStraight g (SearchNode p c dir _) i dep = let
-  (d1, d2) = nineties dir
-  continue = createSN g c i dir (dep + 1)
-  forced1  = createSNIfBlocked g c i d1 (between dir d1) (dep + 1)
-  forced2  = createSNIfBlocked g c i d2 (between dir d2) (dep + 1)
+forcedNeighborsStraight :: Grid -> SearchNode -> Int -> Direction -> Int -> [SearchNode]
+forcedNeighborsStraight g sn i forward dep = let
+  (d1, d2)               = nineties forward
+  continue               = createSN g sn i forward dep
+  forced1                = createSNIfBlocked g sn i d1 (between forward d1) dep
+  forced2                = createSNIfBlocked g sn i d2 (between forward d2) dep
   in
     continue ++ forced1 ++ forced2
     
+createSNIfBlocked :: Grid -> SearchNode -> Int -> Direction -> Direction -> Int -> [SearchNode]
+createSNIfBlocked g prev i blockdir targetdir depth =
+  let d        = dims g
+      blocksq  = moveInDirection d blockdir i
+      targetsq = moveInDirection d targetdir i
+      sn       = (SearchNode (Just prev) i targetdir depth)
+  in
+    if isBlocked g blocksq && not (isBlocked g targetsq)
+    then [(SearchNode (Just sn) targetsq targetdir (depth + 1))]
+    else [ ]
+   
+createSN :: Grid -> SearchNode -> Int -> Direction -> Int -> [SearchNode]
+createSN g prev i dir depth =
+  let d  = dims g
+      t  = moveInDirection d dir i
+      sn = (SearchNode (Just prev) i dir depth)
+  in
+    if isBlocked g t then [ ] else [(SearchNode (Just sn) t dir (depth + 1))]
 
-
-
-{-
-scanW :: Grid -> Int -> SearchNode -> [SearchNode]
-scanW g st i
-  | (isBlocked g i)                                = [ ]
-  | (isFinish g i)                                 = [(SearchNode (e d i) i C 0)]
-  | (isBlocked g (n d i)) || (isBlocked g (s d i)) = forcedNeighborsW g st i
-  | otherwise                                      = scanE g st (w d i)  
-  where d = dims g
-
-forcedNeighborsW :: Grid -> Int -> Int ->  [SearchNode]
-forcedNeighborsW g st i = let
-  d      = dims g
-  diagN  = if isBlocked g (n d i) then [(SearchNode st (nw d i) NW 0)] else [ ]
-  diagS  = if isBlocked g (s d i) then [(SearchNode st (sw d i) SW 0)] else [ ]
-  horizW = if isBlocked g (w d i) then [(SearchNode st  (w d i) W 0)] else [ ]
-  in diagN ++ diagS ++ horizW
-
-scanN :: Grid -> Int -> Int -> [SearchNode]
-scanN g st i
-  | (isBlocked g i)                                = [ ]
-  | (isFinish g i)                                 = [(SearchNode (s d i) i C 0)]
-  | (isBlocked g (w d i)) || (isBlocked g (e d i)) = forcedNeighborsN g st i
-  | otherwise                                      = scanN g st (n d i)  
-  where d = dims g
-
-forcedNeighborsN :: Grid -> Int -> Int ->  [SearchNode]
-forcedNeighborsN g st i = let
-  d      = dims g
-  diagE  = if isBlocked g (e d i) then [(SearchNode st (ne d i) NE 0)] else [ ]
-  diagW  = if isBlocked g (w d i) then [(SearchNode st (nw d i) NW 0)] else [ ]
-  vertS  = if isBlocked g (n d i) then [(SearchNode st  (n d i) N 0)]  else [ ]
-  in diagE ++ diagW ++ vertS
-
-scanS :: Grid -> Int -> Int -> [SearchNode]
-scanS g st i
-  | (isBlocked g i)                                = [ ]
-  | (isFinish g i)                                 = [(SearchNode (n d i) i C 0)]
-  | (isBlocked g (w d i)) || (isBlocked g (e d i)) = forcedNeighborsS g st i
-  | otherwise                                      = scanS g st (s d i)  
-  where d = dims g
-
-forcedNeighborsS :: Grid -> Int -> Int ->  [SearchNode]
-forcedNeighborsS g st i = let
-  d      = dims g
-  diagE  = if isBlocked g (e d i) then [(SearchNode st (se d i) SE 0)] else [ ]
-  diagW  = if isBlocked g (w d i) then [(SearchNode st (sw d i) SW 0)] else [ ]
-  vertS  = if isBlocked g (s d i) then [(SearchNode st  (s d i) S 0)] else [ ]
-  in diagE ++ diagW ++ vertS
--}
-
-
---hasForcedNeighbor :: Pathfinding -> SearchNode -> Bool
---hasForcedNeighbor pf node = 

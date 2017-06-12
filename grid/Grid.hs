@@ -106,6 +106,7 @@ moveInDirection d dir i = case dir of
                             SW -> (sw d i)
                             W  -> (w d i)
                             NW -> (nw d i)
+                            C  -> i
 
 between :: Direction -> Direction -> Direction
 between d1 d2 = case (d1, d2) of
@@ -119,6 +120,7 @@ between d1 d2 = case (d1, d2) of
                   (N, W) -> NW
                   _      -> error $ ("Tried to find direction between non-orthogonal directions: "
                                       ++ show d1 ++ " and " ++ show d2)
+                            
 nineties :: Direction -> (Direction, Direction)
 nineties d = case d of
                N  -> (W, E)
@@ -129,6 +131,8 @@ nineties d = case d of
                SW -> (SE, NW)
                W  -> (S, N)
                NW -> (SW, NE)
+               C  -> error $ "nineties relative center is undefined"
+
 
 fortyfives :: Direction -> (Direction, Direction)
 fortyfives d = case d of
@@ -140,6 +144,7 @@ fortyfives d = case d of
                  SW -> (S, W)
                  W  -> (SW, NW)
                  NW -> (W, N)
+                 C  -> error $ "fortyfives relative center is undefined"
 
 opposite :: Direction -> Direction
 opposite d = case d of
@@ -151,7 +156,8 @@ opposite d = case d of
                SW -> NE
                W  -> E
                NW -> SE
-  
+               C  -> C
+ 
 
 -- Calculates the infinity norm between two Coords
 {-
@@ -232,8 +238,8 @@ instance Show Grid where
 -- represents a starting node of a search in progress
 data SearchNode = SearchNode
   {
-    prev     :: Int,
-    current  :: Int,
+    prev     :: Maybe SearchNode,
+    index    :: Int,
     dir      :: Direction,
     depth    :: Int
   }

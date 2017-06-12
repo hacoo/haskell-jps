@@ -13,7 +13,7 @@ import Control.Monad (when)
 import qualified Data.Vector as Vector
 import qualified Data.Vector.Storable as Storable
 import qualified Data.Vector.Unboxed as Unboxed
-import qualified Data.HashMap.Strict as HashMap
+import qualified Data.Map as Map
 import Data.List
 import Debug.Trace
 
@@ -36,11 +36,13 @@ main =
   -- [input, output] <- getArgs
 
   input  <- return "../maps/AR0011SRBW.jpg"
+  --input  <- return "../maps/testbars.jpg"
   output <- return "./testout.png"
   --start  <- return (Coord 60 53)
   --finish <- return (Coord 47 33)
-  start  <- return (Coord 404 414)
-  finish <- return (Coord 584 298)
+    --start  <- return (Coord 416 420)
+  start  <- return (Coord 407 412)
+  finish <- return (Coord 386 159)
   
   --finish <- return (Coord 420 393)
   putStrLn ("Loading: " ++ input)
@@ -70,34 +72,37 @@ pathfindImage pathIn pathOut startc finishc = do
       finish        <- return (c2i dim finishc)
       putStrLn("starting...")
 
+      {-
       defaultMain [
         bench "searchAstar" $ whnf (\x -> Astar.findPathNormal x start finish) grid
         ]
-      {-
-      (path, grid') <- return (Astar.findPathNormal grid start finish)
-       -}
+      -}
+      (path, visited) <- return (Astar.findPathNormal grid start finish)
 
 {-
--}
       defaultMain [
         bench "searchJPS" $ whnf (\x -> JPS.findPathJPS x start finish) grid
         ]
-      (path, grid') <- return (JPS.findPathJPS grid start finish)
+      (path, visited) <- return (JPS.findPathJPS grid start finish)
+-}
+      --putStrLn $ show (map (\x -> (i2c dim x)) path)
+      -- putStrLn $ show path
+      
+      grid' <- return $ (markStartFinish start finish) $ (markPath path) $ (markVisited visited grid)
       
       case path of
-        Just ps -> do
-          putStrLn("Found a path!")
-        Nothing -> do
+        [] -> do
           putStrLn("No path found!")
+        otherwise -> do
+          putStrLn("Found a path!")
           
       image <- return (gridToImage grid')
-      imageMarked <- return (markStartFinish image start finish)
     
       putStrLn ("Attempting to save to: " ++ pathOut)
       outExists <- doesFileExist pathOut
       when outExists (removeFile pathOut)
       
-      mErr <- save Autodetect pathOut imageMarked
+      mErr <- save Autodetect pathOut image
       case mErr of
         Nothing ->
           putStrLn "Success!"
@@ -147,15 +152,32 @@ gridToImage (Grid (GridDims dimx dimy) grid) =
     gridshape  = coordToDim2 (Coord dimx dimy)
     pixels     = map squareToColor (Unboxed.toList grid)
   in Image.Manifest gridshape (Storable.fromList pixels)
-    
-markStartFinish :: Image.RGB -> Int -> Int -> Image.RGB
-markStartFinish (Image.Manifest msize mvec) start finish =
+
+markVisited :: Map.Map Int Int -> Grid -> Grid
+markVisited visited (Grid dims sqs) =
   let
-      updated = Storable.imap (mark start finish) mvec
-  in (Image.Manifest msize updated)
-    
-mark :: Int -> Int -> Int -> Image.RGBPixel -> Image.RGBPixel
-mark start finish i p | i == start  = (Image.RGBPixel 0  255 0)
-                      | i == finish = (Image.RGBPixel 0  0   255)
-                      | otherwise   = p
-             
+   sqs' = Unboxed.imap (\ i x -> if Map.member i visited then 4 else x) sqs
+  in
+    (Grid dims sqs')
+
+markPath ::  [Int] -> Grid ->  Grid
+markPath path (Grid dims sqs) =
+  let
+    zipped = [(i, 1) | i <- path]
+    pathset = Map.fromList zipped
+    sqs' = Unboxed.imap (\ i x -> if Map.member i pathset then 5 else x) sqs
+  in
+    (Grid dims sqs')
+
+markStartFinish :: Int -> Int -> Grid -> Grid
+markStartFinish start finish (Grid dims sqs) =
+  let
+   sqs' = Unboxed.imap (markSF start finish) sqs
+  in
+    (Grid dims sqs')
+
+markSF :: Int -> Int -> Int -> Square -> Square
+markSF start finish i x | i == start  = 2
+                        | i == finish = 3
+                        | otherwise   = x
+
