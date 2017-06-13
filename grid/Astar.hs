@@ -90,8 +90,6 @@ betterThanVisited visited val i = case result of
 addToPQ :: PSQ.IntPSQ Int SearchNode -> [(Int, SearchNode)] -> PSQ.IntPSQ Int SearchNode
 addToPQ open nodes = foldl (\ pq (priority, node) -> PSQ.insert (index node) priority node pq) open nodes
 
-
-
 -- Runs a-star search with the specific expansion function and heuristic function.
 -- Returns the optimal path as a list of integers, and a Grid, updated to show the path
 -- and visited nodes.

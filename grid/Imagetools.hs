@@ -15,7 +15,8 @@ import qualified Data.Vector.Unboxed as Unboxed
 import qualified Data.Map as Map
 import Data.List
 import Debug.Trace
-import System.Console.GetOpt
+import Options.Applicative
+import Data.Semigroup ((<>))
 
 import qualified Vision.Image as Image
 import Vision.Image.Storage.DevIL (Autodetect (..), PNG (..), load, save)
@@ -30,16 +31,28 @@ import qualified Astar as Astar
 main::IO ()
 main = 
   do
-  -- [input, output] <- getArgs
 
+    -- TODO : make an actual command-line interface instead of hardcoding :)
+    
+  -- [input, output] <- getArgs
+    {-
   input  <- return "../maps/AR0011SRBW.jpg"
-  --input  <- return "../maps/testbars.jpg"
-  output <- return "./testout.png"
-  --start  <- return (Coord 60 53)
-  --finish <- return (Coord 47 33)
-    --start  <- return (Coord 416 420)
   start  <- return (Coord 407 412)
   finish <- return (Coord 386 159)
+-}
+
+    {-
+  input  <- return "../maps/AR0017SRBW.jpg"
+  start  <- return (Coord 70 54)
+  finish <- return (Coord 43 42)
+-}
+
+  input  <- return "../maps/CalderaBW.jpg"
+  start  <- return (Coord 572 56)
+  finish <- return (Coord 140 511)
+
+  
+  output <- return "./testout.png"
   
   --finish <- return (Coord 420 393)
   pathfindImage input output start finish
@@ -71,13 +84,19 @@ pathfindImage pathIn pathOut startc finishc = do
       (path, visited) <- return (Astar.findPathNormal grid start finish)
       -}
 
-{-
+      {-
       defaultMain [
         bench "searchJPS" $ whnf (\x -> JPS.findPathJPS x start finish) grid
         ]
--}
+      -}
+      
       (path, visited) <- return (JPS.findPathJPS grid start finish)
-      grid' <- return $ (markStartFinish start finish) $ (markPath path) $ (markVisited visited grid)
+      
+      grid' <- return
+        $ (markStartFinish start finish)
+        $ (markPath path)
+        $ (markVisited visited)
+        $ grid
       
       case path of
         [] -> do
@@ -113,7 +132,7 @@ squareToColor :: Square -> Image.RGBPixel
 squareToColor sq = case sq of
                      0 -> (Image.RGBPixel 0   0   0)   -- Blocked
                      1 -> (Image.RGBPixel 255 255 255) -- Open 
-                     2 -> (Image.RGBPixel 0   255 0)   -- Start
+                     2 -> (Image.RGBPixel 255   0 255)   -- Start
                      3 -> (Image.RGBPixel 0   0   255) -- Finish
                      4 -> (Image.RGBPixel 244 158 66)  -- Visited
                      5 -> (Image.RGBPixel 66 212 244)  -- On Path

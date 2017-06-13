@@ -11,43 +11,15 @@ import Data.Vector.Unboxed ((!))
 -- import qualified Data.PQueue.Min as PQ
 import qualified Data.IntPSQ as PSQ
 
-
-{-
-Damn! Any way to use these with Unboxed vectors?
-
--- Square represents a single point on the grid. A Square may be one of four things:
--- - Open: An unvisited open space that can be entered with cost 1.
--- - Visited: A visited open space that should not be explored again
--- - onPath: A node on the shortest path from source to target
--- - Blocked: An closed space that cannot be entered.
--- - Start: The starting point. There should only be one per grid!
--- - Finish: The target endpoint. There should only be one per grid!
-data Square = Open | Visited | Blocked | Start | Finish
-
-instance Eq Square where
-  Open    == Open    = True
-  Blocked == Blocked = True
-  Start   == Start   = True
-  Finish  == Finish  = True
-  _       == _       = False
-
-instance Show Square where
-  show Open    = "Open"
-  show Blocked = "Blocked"
-  show Start   = "Start"
-  show Finish  = "Finish"
--}
-
-
 -- Squares are represented by simple Word8's so they can be used in
 -- Unboxed vectors. This sucks, I want to be able to associate them with their
--- labels! Anyway, here's waht each value means:
--- 0 : Blocked
--- 1 : Open
--- 2 : Start
--- 3 : Finish
--- 4 : Visited
--- 5 : onPath
+-- labels! I'm sure there's some way to do this. Anyway, here's what each value means:
+-- 0 : Blocked - an un-enterable square
+-- 1 : Open    - a noramal enterable square
+-- 2 : Start   - the starting square
+-- 3 : Finish  - the ending goal square
+-- 4 : Visited - a square that was visited during pathfinding
+-- 5 : onPath  - a square on the optimal path from start to finish
 
 type Square = Word8
 
@@ -60,17 +32,7 @@ data Coord = Coord
   }
 
 data Direction = N | NE | E | SE | S | SW | W | NW | C deriving (Eq, Show)
-{-
-instance Show Direction where
-  show N  = "N"
-  show NE = "NE"
-  show E  = "E"
-  show SE = "SE"
-  show S  = "S"
-  show SW = "SW"
-  show W  = "W"
-  show NW = "NW"
--}
+
 -- Functions for moving in each direction
 n :: GridDims -> Int -> Int
 n d i = i - (xmax d)
@@ -158,18 +120,6 @@ opposite d = case d of
                NW -> SE
                C  -> C
  
-
--- Calculates the infinity norm between two Coords
-{-
-linf :: Coord -> Coord -> Int
-linf (Coord x1 y1) (Coord x2 y2) = let
-  xdif = abs (x1-x2)
-  ydif = abs (y1-y2)
-  in
-    if xdif >= ydif then xdif else ydif
-{-# INLINE linf #-}
--}
-
 chebyshev :: Coord -> Coord -> Int
 chebyshev (Coord x1 y1) (Coord x2 y2) = let
   xdif = abs (x2-x1)

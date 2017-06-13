@@ -26,7 +26,6 @@ findPathJPS g start finish =
     case result of
       Nothing -> ([ ], v)
       Just sn -> (unwindJPS pf' sn, v)
-      --Just sn -> ([], v)
 
 unwindJPS :: Pathfinding -> SearchNode -> [Int]
 unwindJPS pf (SearchNode prev i dir depth) = 
@@ -55,7 +54,6 @@ pairToDirection d src dest
   | dest == (nw d src) = NW
   | otherwise          = C
 
-
 -- Figurs out which direction to scan in and proceed
 expandJPS :: ExpandFn
 expandJPS pf sn = let (SearchNode prev curr dir depth) = sn in
@@ -66,7 +64,6 @@ expandJPS pf sn = let (SearchNode prev curr dir depth) = sn in
 heuristicJPS :: HeuristicFn
 heuristicJPS = normalHeuristic
     
-
 scan :: Pathfinding -> SearchNode -> [SearchNode]
 scan pf sn 
   | dir `elem` [N, E, S, W]  = scanStraight pf sn c depth
@@ -90,9 +87,7 @@ scanDiag pf sn i dep
     (f1, f2)  = fortyfives diag
     stScans   = (scanStraight pf (SearchNode (Just sn) i f1 dep) i dep) ++
                 (scanStraight pf (SearchNode (Just sn) i f2 dep) i dep)
-    --stScans   = [(SearchNode (Just sn) i f1 dep), (SearchNode (Just sn) i f2 dep)]
     
-
 scanStraight :: Pathfinding -> SearchNode -> Int -> Int -> [SearchNode]
 scanStraight pf sn i dep
   | (isBlocked g i)                   = [ ]
