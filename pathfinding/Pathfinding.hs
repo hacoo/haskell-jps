@@ -37,8 +37,8 @@ main =
   -- [input, output] <- getArgs
     {-
   input  <- return "../maps/AR0011SRBW.jpg"
-  start  <- return (Coord 407 412)
-  finish <- return (Coord 386 159)
+  start  <- return (Coord 414 418)
+  finish <- return (Coord 253 130)
 -}
 
     {-
@@ -48,8 +48,10 @@ main =
 -}
 
   input  <- return "../maps/CalderaBW.jpg"
-  start  <- return (Coord 572 56)
   finish <- return (Coord 140 511)
+  start  <- return (Coord 572 56)
+{-    
+-}
 
   
   output <- return "./testout.png"
@@ -81,16 +83,16 @@ pathfindImage pathIn pathOut startc finishc = do
       defaultMain [
         bench "searchAstar" $ whnf (\x -> Astar.findPathNormal x start finish) grid
         ]
-      (path, visited) <- return (Astar.findPathNormal grid start finish)
       -}
+      (path, visited) <- return (Astar.findPathNormal grid start finish)
 
       {-
       defaultMain [
         bench "searchJPS" $ whnf (\x -> JPS.findPathJPS x start finish) grid
         ]
-      -}
       
       (path, visited) <- return (JPS.findPathJPS grid start finish)
+      -}
       
       grid' <- return
         $ (markStartFinish start finish)
