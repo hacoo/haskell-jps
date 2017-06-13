@@ -60,9 +60,6 @@ expandJPS pf sn = let (SearchNode prev curr dir depth) = sn in
     case dir of 
       C -> normalExpand pf sn
       _ -> scan pf sn
-
-heuristicJPS :: HeuristicFn
-heuristicJPS = normalHeuristic
     
 scan :: Pathfinding -> SearchNode -> [SearchNode]
 scan pf sn 
@@ -70,16 +67,19 @@ scan pf sn
   | otherwise                = scanDiag pf sn c depth
     where (SearchNode p c dir depth) = sn
 
+heuristicJPS :: HeuristicFn
+heuristicJPS = normalHeuristic
+
 -- Diagonal scan does not need to check for forced neighbors -- the straight scans that it spawns
 -- will catch them! COOL!!!
 scanDiag :: Pathfinding -> SearchNode -> Int -> Int -> [SearchNode]
 scanDiag pf sn i dep
-  | (isBlocked g i)                   =  [ ]
-  | (isFinish  pf i)                  =  [(SearchNode (Just sn) i C 0)]
-  | otherwise                         =  if null stScans
-                                         then (scanDiag pf sn (moveInDirection d diag i) (dep + 1))
-                                         else stScans ++
-                                              [(SearchNode (Just sn) (moveInDirection d diag i) diag (dep + 1))]
+  | (isBlocked g i)  =  [ ]
+  | (isFinish  pf i) =  [(SearchNode (Just sn) i C 0)]
+  | otherwise        =  if null stScans
+                        then (scanDiag pf sn (moveInDirection d diag i) (dep + 1))
+                        else stScans ++
+                             [(SearchNode (Just sn) (moveInDirection d diag i) diag (dep + 1))]
   where
     g         = grid pf
     d         = dims g
@@ -90,10 +90,11 @@ scanDiag pf sn i dep
     
 scanStraight :: Pathfinding -> SearchNode -> Int -> Int -> [SearchNode]
 scanStraight pf sn i dep
-  | (isBlocked g i)                   = [ ]
-  | (isFinish  pf i)                  = [(SearchNode (Just sn) i C 0)]
+  | (isBlocked g i)                        = [ ]
+  | (isFinish  pf i)                       = [(SearchNode (Just sn) i C 0)]
   | hasForcedNeighborsStraight g forward i = forcedNeighborsStraight g sn i forward dep
-  | otherwise                         = scanStraight pf sn (moveInDirection d forward i) (dep + 1)
+  | otherwise                              = scanStraight pf sn
+                                             (moveInDirection d forward i) (dep + 1)
   where
     g                              = grid pf
     d                              = dims g
